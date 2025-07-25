@@ -1,0 +1,70 @@
+/* src/app/data-table/data-table.component.css */
+.controls {
+  margin-bottom: 20px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.controls input[type="text"] {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  width: 250px;
+}
+
+.controls button {
+  padding: 8px 15px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.controls button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+.table-container {
+  height: 500px; /* Fixed height for virtual scrolling */
+  border: 1px solid #eee;
+  overflow: hidden; /* CdkVirtualScrollViewport handles its own scrolling */
+}
+
+.example-viewport {
+  height: 100%;
+  width: 100%;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table th, .data-table td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: left;
+}
+
+.data-table th {
+  background-color: #f2f2f2;
+  position: sticky; /* Make header sticky in virtual scroll */
+  top: 0;
+  z-index: 10;
+}
+
+.data-table tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+
+.data-table tr:hover {
+  background-color: #f1f1f1;
+}
+
+.data-table tr.selected {
+  background-color: #cce0ff;
+  font-weight: bold;
+}

@@ -1,0 +1,38 @@
+<div class="controls">
+  <input
+    type="text"
+    placeholder="Filter by Name, Email, or Address"
+    [ngModel]="filterTerm()"
+    (ngModelChange)="filterTerm.set($event); applyFilter()"
+  />
+  <button (click)="addRow()">Add Row</button>
+  <button (click)="updateSelectedRow()" [disabled]="selectedRowId() === null">Update Selected</button>
+  <button (click)="deleteSelectedRow()" [disabled]="selectedRowId() === null">Delete Selected</button>
+</div>
+
+<div class="table-container">
+  <cdk-virtual-scroll-viewport itemSize="48" class="example-viewport">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Address</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          *cdkVirtualFor="let row of filteredRows(); trackBy: trackById"
+          [class.selected]="row.isSelected"
+          (click)="selectRow(row)"
+        >
+          <td>{{ row.id }}</td>
+          <td>{{ row.name }}</td>
+          <td>{{ row.email }}</td>
+          <td>{{ row.address }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </cdk-virtual-scroll-viewport>
+</div>
