@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Heatmap (Pure JS)</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #222;
+            font-family: sans-serif;
+            color: #eee;
+            overflow: hidden; /* Prevent body scroll if content slightly overflows */
+        }
+
+        h1 {
+            margin-bottom: 20px;
+            color: #fff;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px 20px;
+            border-radius: 8px;
+            z-index: 100;
+        }
+        .controls label {
+            margin-right: 5px;
+        }
+        .controls input[type="range"] {
+            width: 150px;
+        }
+        .controls button {
+            padding: 8px 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .controls button:hover {
+            background-color: #0056b3;
+        }
+        #fps-counter {
+            font-size: 1.1em;
+            color: #fff;
+            margin-left: 10px;
+        }
+
+        #heatmap-container {
+            border: 2px solid #555;
+            background-color: #0a0a0a;
+            display: grid;
+            /* Grid columns and rows will be set by JS */
+        }
+
+        .heatmap-cell {
+            width: 100%; /* Will be overridden by grid-template-columns */
+            height: 100%; /* Will be overridden by grid-template-rows */
+            box-sizing: border-box; /* Include padding/border in cell dimensions */
+            /* Background color will be set by JS */
+            /* transition: background-color 0.1s ease-out; /* Optional: smooth color change */
+        }
+        /* Optional: Add hover effect to see individual cell responsiveness */
+        .heatmap-cell:hover {
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 0 5px rgba(255, 255, 255, 0.7);
+            z-index: 1; /* Bring hovered cell to front */
+        }
+    </style>
+</head>
+<body>
+    <h1>Dynamic Heatmap</h1>
+    <div class="controls">
+        <label for="gridSize">Grid Size (N x N):</label>
+        <input type="range" id="gridSize" min="10" max="200" value="50" step="10">
+        <span id="gridSizeValue">50</span>
+        <button id="startStopButton">Start Heatmap</button>
+        <div id="fps-counter">FPS: 0</div>
+    </div>
+    <div id="heatmap-container"></div>
+
+    <script>
+        const heatmapContainer = document.getElementById('heatmap-container');
+        const gridSizeInput = document.getElementById('gridSize');
+        const gridSizeValueSpan = document.getElementById('gridSizeValue');
+        const startStopButton = document.getElementById('startStopButton');
+        const fpsCounter = document.getElementById('fps-counter');
+
+        let gridSize = parseInt(gridSizeInput.value);
+        let cells = []; // 2D array to store cell values and their DOM elements
+        let animationIntervalId = null;
+        let isRunning = false;
+
+        const HEATMAP_WIDTH = 800; // Fixed width for container
+        const HEATMAP_HEIGHT = 600; // Fixed height for container
+        const UPDATE_INTERVAL_MS = 100; // How often to update heatmap values (10 FPS for logic)
+
+        let lastFrameTime = performance.now();
+        let frameCount = 0;
+        let lastFPSUpdateTime = performance.now();
+
+        // Helper to convert a value to an HSL color (for heatmap effect)
+        function valueToColor(value, minVal = 0, maxVal = 100) {
+            const hue = (1 - (value - minVal) / (maxVal - minVal)) * 240; // From red (0) to blue (240)
+            return `hsl(${hue}, 100%, 50%)`;
+        }
+
+        // --- Core Heatmap Logic ---
+        function initializeGrid(size) {
+            gridSize = size;
+            heatmapContainer.style.gridTemplateColumns = `repeat(${gridSize}, 1fr)`;
+            heatmapContainer.style.gridTemplateRows = `repeat(${gridSize}, 1fr)`;
+            // Adjust container dimensions to be proportional, or fix cell size
+            const cellSize = Math.min(HEATMAP_WIDTH / gridSize, HEATMAP_HEIGHT / gridSize);
+            heatmapContainer.style.width = `${cellSize * gridSize}px`;
+            heatmapContainer.style.height = `${cellSize * gridSize}px`;
+
+
+            // Clear existing cells
+            heatmapContainer.innerHTML = '';
+            cells = [];
+
+            // Create new cells
+            for (let r = 0; r < gridSize; r++) {
+                cells[r] = [];
+                for (let c = 0; c < gridSize; c++) {
+                    const cellDiv = document.createElement('div');
+                    cellDiv.className = 'heatmap-cell';
+                    const initialValue = Math.random() * 100; // Random initial value
+                    cellDiv.style.backgroundColor = valueToColor(initialValue);
+                    heatmapContainer.appendChild(cellDiv);
+                    cells[r][c] = { value: initialValue, element: cellDiv };
+                }
+            }
+        }
+
+        // Simple diffusion algorithm for dynamic update
+        function updateHeatmapValues() {
+            // Create a copy of values for calculation to avoid using already updated values in current step
+            const newValues = Array(gridSize).fill(0).map(() => Array(gridSize).fill(0));
+
+            for (let r = 0; r < gridSize; r++) {
+                for (let c = 0; c < gridSize; c++) {
+                    let sumNeighbors = cells[r][c].value;
+                    let countNeighbors = 1;
+
+                    // Sum neighbors (simple 4-directional for now)
+                    if (r > 0) { sumNeighbors += cells[r - 1][c].value; countNeighbors++; }
+                    if (r < gridSize - 1) { sumNeighbors += cells[r + 1][c].value; countNeighbors++; }
+                    if (c > 0) { sumNeighbors += cells[r][c - 1].value; countNeighbors++; }
+                    if (c < gridSize - 1) { sumNeighbors += cells[r][c + 1].value; countNeighbors++; }
+                    
+                    // Add some randomness
+                    sumNeighbors += (Math.random() - 0.5) * 20; // -10 to +10 noise
+                    
+                    // Simple average, clamped
+                    newValues[r][c] = Math.max(0, Math.min(100, sumNeighbors / countNeighbors));
+                }
+            }
+
+            // Apply new values and update DOM
+            for (let r = 0; r < gridSize; r++) {
+                for (let c = 0; c < gridSize; c++) {
+                    const cell = cells[r][c];
+                    cell.value = newValues[r][c];
+                    cell.element.style.backgroundColor = valueToColor(cell.value);
+                }
+            }
+        }
+
+        // --- Animation Loop & Controls ---
+        function animateLoop(currentTime) {
+            const deltaTime = currentTime - lastFrameTime;
+
+            // Only update heatmap values at set intervals
+            if (deltaTime >= UPDATE_INTERVAL_MS) {
+                updateHeatmapValues();
+                lastFrameTime = currentTime - (deltaTime % UPDATE_INTERVAL_MS); // Adjust lastFrameTime to keep interval accurate
+            }
+            
+            // FPS Counter
+            frameCount++;
+            if (currentTime >= lastFPSUpdateTime + 1000) {
+                fpsCounter.textContent = `FPS: ${frameCount}`;
+                frameCount = 0;
+                lastFPSUpdateTime = currentTime;
+            }
+
+            if (isRunning) {
+                requestAnimationFrame(animateLoop);
+            }
+        }
+
+        function startHeatmap() {
+            if (!isRunning) {
+                isRunning = true;
+                startStopButton.textContent = 'Stop Heatmap';
+                // Reinitialize grid if changing size or starting first time
+                initializeGrid(parseInt(gridSizeInput.value));
+                
+                lastFrameTime = performance.now();
+                lastFPSUpdateTime = performance.now();
+                frameCount = 0;
+                requestAnimationFrame(animateLoop);
+            }
+        }
+
+        function stopHeatmap() {
+            if (isRunning) {
+                isRunning = false;
+                startStopButton.textContent = 'Start Heatmap';
+                cancelAnimationFrame(animationIntervalId); // Ensure animation stops
+                // Optional: clear cells to free up memory
+                heatmapContainer.innerHTML = '';
+                cells = [];
+            }
+        }
+
+        // Event Listeners for Controls
+        gridSizeInput.addEventListener('input', () => {
+            gridSizeValueSpan.textContent = gridSizeInput.value;
+            if (isRunning) { // If running, restart with new grid size
+                stopHeatmap();
+                startHeatmap();
+            } else { // Just initialize for preview if not running
+                initializeGrid(parseInt(gridSizeInput.value));
+            }
+        });
+
+        startStopButton.addEventListener('click', () => {
+            if (isRunning) {
+                stopHeatmap();
+            } else {
+                startHeatmap();
+            }
+        });
+
+        // Initialize on load
+        initializeGrid(parseInt(gridSizeInput.value));
+    </script>
+</body>
+</html>
